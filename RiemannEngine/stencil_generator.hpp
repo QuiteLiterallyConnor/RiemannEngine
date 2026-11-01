@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_STENCIL_GENERATOR_HPP
+#define RIEMANN_ENGINE_PUBLIC_STENCIL_GENERATOR_HPP
+
+#include "engine/grid/stencil.hpp"
+
+#endif

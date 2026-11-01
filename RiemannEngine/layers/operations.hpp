@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_LAYER_OPERATIONS_HPP
+#define RIEMANN_ENGINE_PUBLIC_LAYER_OPERATIONS_HPP
+
+#include "engine/nn/operations.hpp"
+
+#endif

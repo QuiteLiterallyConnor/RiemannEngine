@@ -1,0 +1,33 @@
+build/*
+build
+build/
+build-*/
+*.deb
+*.msi
+*.wixpdb
+apt/riemann-repo/
+debian
+.wix/
+*.log
+CMakeCache.txt
+CMakeFiles/
+build.ninja
+dist/
+cmake/
+!/cmake/
+cmake/RiemannEngineConfig.cmake.in
+
+# Jekyll docs preview
+docs/_site/
+docs/.jekyll-cache/
+docs/Gemfile.lock
+
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyd
+*.egg-info/
+.pytest_cache/
+

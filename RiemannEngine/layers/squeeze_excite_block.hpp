@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_LAYER_SQUEEZE_EXCITE_BLOCK_HPP
+#define RIEMANN_ENGINE_PUBLIC_LAYER_SQUEEZE_EXCITE_BLOCK_HPP
+
+#include "engine/nn/squeeze_excite.hpp"
+
+#endif

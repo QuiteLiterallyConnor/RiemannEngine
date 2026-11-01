@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_POSITION_MANAGER_HPP
+#define RIEMANN_ENGINE_PUBLIC_POSITION_MANAGER_HPP
+
+#include "engine/grid/space.hpp"
+
+#endif

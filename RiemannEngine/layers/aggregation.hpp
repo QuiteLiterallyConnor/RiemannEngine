@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_LAYER_AGGREGATION_HPP
+#define RIEMANN_ENGINE_PUBLIC_LAYER_AGGREGATION_HPP
+
+#include "engine/nn/pooling.hpp"
+
+#endif

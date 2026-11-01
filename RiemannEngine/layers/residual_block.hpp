@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_LAYER_RESIDUAL_BLOCK_HPP
+#define RIEMANN_ENGINE_PUBLIC_LAYER_RESIDUAL_BLOCK_HPP
+
+#include "engine/nn/residual.hpp"
+
+#endif

@@ -1,0 +1,69 @@
+[build-system]
+# torch is intentionally not a build requirement: the bindings must compile
+# against the torch already installed in your environment (CPU or a specific
+# CUDA variant). Install torch first and build with:
+#   pip install scikit-build-core ninja
+#   pip install --no-build-isolation .
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "riemannengine"
+version = "1.0.0"
+description = "CUDA-accelerated sparse tensor engine with adaptive mixed-resolution voxelization and 3D Gaussian splats"
+readme = "python/README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = ["torch>=2.1"]
+keywords = [
+    "sparse convolution",
+    "sparse tensor",
+    "voxelization",
+    "gaussian splatting",
+    "pytorch",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/QuiteLiterallyConnor/RiemannEngine"
+Documentation = "https://quiteliterallyconnor.github.io/RiemannEngine/"
+
+[tool.scikit-build]
+minimum-version = "0.10"
+cmake.version = ">=3.24"
+wheel.packages = ["python/riemannengine"]
+# Only ship the extension module; skip the C++ SDK install rules.
+install.components = ["python"]
+# Persistent build directory so repeated wheel builds are incremental.
+build-dir = "build-pip/{wheel_tag}"
+
+[tool.scikit-build.cmake.define]
+RIEMANN_BUILD_PYTHON = "ON"
+RIEMANN_BUILD_TESTS = "OFF"
+RIEMANN_BUILD_ADAPTIVE_TESTS = "OFF"
+RIEMANN_BUILD_GAUSSIAN_BENCHMARKS = "OFF"
+RIEMANN_COPY_TORCH_DLLS = "OFF"
+
+[tool.scikit-build.sdist]
+exclude = [
+    "assets",
+    "benchmarks/*.json",
+    "build*",
+    "dist",
+    "docs",
+    "msi",
+    "apt",
+    "docker",
+    "tests/data",
+    ".venv",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]

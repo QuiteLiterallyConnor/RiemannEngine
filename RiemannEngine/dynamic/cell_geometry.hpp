@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_DYNAMIC_CELL_GEOMETRY_HPP
+#define RIEMANN_ENGINE_DYNAMIC_CELL_GEOMETRY_HPP
+
+#include "../octree/cell.hpp"
+
+#endif

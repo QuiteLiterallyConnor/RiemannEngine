@@ -1,0 +1,65 @@
+# Doxygen configuration for the RiemannEngine API reference.
+# Run from the repository root:  doxygen docs/Doxyfile
+# Output: build/doxygen/html  (the Pages workflow publishes it at /api/reference/)
+
+PROJECT_NAME           = "RiemannEngine"
+PROJECT_NUMBER         = 1.0.0
+PROJECT_BRIEF          = "GPU-first C++ sparse tensors, adaptive voxelization and 3D Gaussian splats"
+OUTPUT_DIRECTORY       = build/doxygen
+CREATE_SUBDIRS         = NO
+CASE_SENSE_NAMES       = YES
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = RiemannEngine
+STRIP_FROM_INC_PATH    = RiemannEngine
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MARKDOWN_SUPPORT       = YES
+BUILTIN_STL_SUPPORT    = YES
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_ANON_NSPACES   = NO
+HIDE_UNDOC_RELATIONS   = NO
+SORT_MEMBER_DOCS       = NO
+WARN_IF_UNDOCUMENTED   = NO
+WARN_LOGFILE           = build/doxygen/warnings.log
+QUIET                  = YES
+
+INPUT                  = RiemannEngine docs/doxygen-mainpage.md
+USE_MDFILE_AS_MAINPAGE = docs/doxygen-mainpage.md
+FILE_PATTERNS          = *.hpp *.h
+RECURSIVE              = YES
+EXCLUDE                = RiemannEngine/vendor
+EXCLUDE_PATTERNS       = */detail/* */vendor/*
+EXCLUDE_SYMBOLS        = detail detail::* *::detail *::detail::* internal *::internal
+
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = NO
+SEARCH_INCLUDES        = YES
+INCLUDE_PATH           = RiemannEngine
+PREDEFINED             = RIEMANN_ENABLE_GAUSSIAN \
+                         RIEMANN_NO_PYBIND \
+                         USE_CUDA \
+                         __CUDACC__ \
+                         __host__= \
+                         __device__= \
+                         __forceinline__=inline \
+                         TORCH_MODULE(x)="class x"
+
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = NO
+REFERENCES_RELATION    = NO
+VERBATIM_HEADERS       = YES
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_COLORSTYLE        = DARK
+HTML_DYNAMIC_SECTIONS  = YES
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+GENERATE_LATEX         = NO
+HAVE_DOT               = NO
+CLASS_GRAPH            = YES

@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_LAYER_STANDARDIZATION_HPP
+#define RIEMANN_ENGINE_PUBLIC_LAYER_STANDARDIZATION_HPP
+
+#include "engine/nn/normalization.hpp"
+
+#endif

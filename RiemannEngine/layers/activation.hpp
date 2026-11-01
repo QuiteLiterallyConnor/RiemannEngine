@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_LAYER_ACTIVATION_HPP
+#define RIEMANN_ENGINE_PUBLIC_LAYER_ACTIVATION_HPP
+
+#include "engine/nn/activation.hpp"
+
+#endif

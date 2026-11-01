@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_PUBLIC_HOST_SPARSE_CONV_STENCILS_HPP
+#define RIEMANN_ENGINE_PUBLIC_HOST_SPARSE_CONV_STENCILS_HPP
+
+#include "engine/ops/convolution_cpu.hpp"
+
+#endif

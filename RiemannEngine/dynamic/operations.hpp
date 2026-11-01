@@ -1,0 +1,6 @@
+#ifndef RIEMANN_ENGINE_DYNAMIC_OPERATIONS_HPP
+#define RIEMANN_ENGINE_DYNAMIC_OPERATIONS_HPP
+
+#include "../octree/ops.hpp"
+
+#endif
