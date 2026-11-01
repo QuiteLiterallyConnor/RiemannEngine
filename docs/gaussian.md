@@ -25,6 +25,7 @@ rasterizer (LibTorch reference path plus fused CUDA kernels), a 3DGS training lo
 
 | Header | Contents |
 |---|---|
+| `gaussian_voxel/voxelize.hpp` | `riemann::gaussian_voxel::rasterize`, density/occupancy outputs and aggregation options |
 | `splat/soup.hpp` | `GaussianTensor`, an activated structure-of-arrays container |
 | `splat/model.hpp` | `GaussianModel`, raw trainable 3DGS parameters |
 | `splat/camera.hpp` | `Camera` |
@@ -36,6 +37,11 @@ rasterizer (LibTorch reference path plus fused CUDA kernels), a 3DGS training lo
 | `splat/primitive.hpp` | `Gaussian3D<T>`, a single analytic Gaussian (covariance, density, sampling, bounds) |
 
 The `normal/normal_*.hpp` headers forward to these.
+
+The separate [`riemann::gaussian_voxel` API](./gaussian-voxel.md) rasterizes
+Gaussian features and density onto an existing adaptive voxel topology. Its
+first reference implementation is CPU-only; CUDA voxel indexing and kernels
+are planned as a separate stage.
 
 ## Two representations
 

@@ -45,6 +45,7 @@
 #include "learning/learning.hpp"
 
 #ifdef RIEMANN_ENABLE_GAUSSIAN
+#include "gaussian_voxel/voxelize.hpp"
 #include "normal/normal3d.hpp"
 #include "normal/normal_tensor.hpp"
 #include "normal/normal_optimizer.hpp"
