@@ -10,8 +10,9 @@ permalink: /gaussian-voxel/
 
 `riemann::gaussian_voxel` connects
 `riemann::gaussian::GaussianTensor` to `riemann::adaptive::AdaptiveSparseTensor`.
-The fixed-topology CPU reference forward/backward operation is implemented;
-device-side indexing, LiDAR targets, and end-to-end training remain later stages.
+The fixed-topology CPU reference, LiDAR ray targets, masked occupancy loss,
+Python bindings, and a nuScenes mini example are implemented. CUDA voxel
+execution and automatic topology refinement remain future work.
 {: .fs-5 .fw-300 }
 
 ## Existing engine components
@@ -104,28 +105,85 @@ inputs and a 3D adaptive reference topology. Optional confidence is CPU
 the reference topology and replaces its features with Gaussian-aggregated
 features; density and occupancy are separate tensors. `max_associations`
 bounds both candidate support-index cells and emitted Gaussian/voxel pairs.
-CUDA inputs fail with a clear unsupported-operation error until the device
-index and accumulation kernels are implemented. Batched scene IDs and
-topology refinement are not part of this first implementation.
+CUDA inputs fail with a clear unsupported-operation error. The current
+voxelizer uses a CPU topology and CPU LibTorch operations; the LiDAR target
+builder is also CPU-only. Batched scene IDs are supported by the target
+builder, while the Gaussian voxelizer currently consumes one shared topology.
+Topology refinement is an explicit preprocessing decision, not a differentiable
+part of the forward pass.
 
-## Implementation stages
+## LiDAR occupancy supervision
 
-1. **Fixed-topology forward/backward (implemented):** public options and output,
-   adaptive support association, differentiable density/feature reduction,
-   CPU correctness and finite-difference gradient tests. Unsupported device
-   and dimensionality combinations are rejected explicitly.
-2. **CUDA execution:** add device-side spatial indexing, support lookup,
-   accumulation, and backward; compare against the reference implementation
-   and test gradients on CUDA.
-3. **Adaptive refinement integration:** add configurable, capped refinement
-   criteria and mixed-resolution association without overlap or double-counting.
-   Keep the resulting topology fixed during each gradient computation.
-4. **LiDAR supervision:** add batched ray traversal, occupied/free/unknown
-   labels, coordinate transforms, cached target support, and masked loss.
-5. **Integration and evaluation:** add the synthetic end-to-end training
-   example, inference path, focused benchmarks, and complete API/numerics/
-   platform documentation.
+The target builder traverses each sensor-origin-to-return segment through the
+reference grid. Traversed leaves are free, a return leaf is occupied, and
+occupied takes precedence where rays overlap. `observed` is the union of those
+masks; all remaining leaves are unknown and are omitted from the loss.
 
-Each stage is independently testable. Performance and hardware-specific
-benchmark values are recorded only after the corresponding implementation has
-been run on the named hardware.
+```cpp
+#include <gaussian_voxel/occupancy.hpp>
+
+auto targets = riemann::occupancy::from_lidar(
+    points, origins, ray_batch_ids, batch_size, reference_grid,
+    /*options=*/{}, sensor_to_world); // optional [B, 4, 4]
+auto labels = targets.labels();       // [B, V], occupied=1
+auto loss = riemann::occupancy::masked_binary_cross_entropy(
+    predicted_occupancy, targets);
+```
+
+`points` and `origins` are `[R, 3]` float tensors. `ray_batch_ids` is CPU
+int64 `[R]`; the optional transforms are finite CPU `[B, 4, 4]` matrices.
+`LidarRayOptions::max_ray_distance` clips free-space traversal without
+inventing a return at the clipped endpoint. `max_ray_voxels` bounds traversal work for an individual ray.
+`masked_binary_cross_entropy` accepts probabilities in `[0, 1]`, averages
+across observed leaves only, and returns a differentiable zero when there are
+no observations.
+
+Python exposes matching interfaces under `riemannengine.gaussian_voxel` and
+`riemannengine.occupancy`. The Python extension must be built with
+`RIEMANN_ENABLE_GAUSSIAN=ON`.
+
+## nuScenes mini example
+
+`examples/gaussian_voxel_nuscenes.py` joins `sample_data`, calibration, sensor,
+and ego-pose records from the nuScenes mini metadata, reads the six camera
+keyframes and `LIDAR_TOP`, predicts image-conditioned Gaussians, rasterizes
+them onto a fixed 2 m grid, and trains with the masked LiDAR occupancy loss.
+It also supports image-only inference and writes a compressed `.npz` containing
+voxel centers, density, and occupancy probabilities.
+
+```powershell
+python examples\gaussian_voxel_nuscenes.py --root D:\nuScenes --mode train --steps 10
+python examples\gaussian_voxel_nuscenes.py --root D:\nuScenes --mode infer
+```
+
+Install Pillow if it is not already available (`python -m pip install Pillow`).
+The example is intentionally CPU-only: it rejects a CUDA-visible PyTorch
+runtime because the native 3D voxelizer and LiDAR target builder do not yet
+provide CUDA execution. The example is an integration/training smoke path, not
+a benchmark or a claim of converged nuScenes performance. Use
+`--sample-index` to select a different keyframe.
+
+## Validation and remaining work
+
+The CPU C++ suite covers voxel aggregation and gradients, ray labeling,
+transforms, batch isolation, clipping, unknown masks, and masked-loss
+gradients. Python smoke tests cover the exposed rasterizer and occupancy API.
+On an AMD Ryzen 5 5600X with PyTorch 2.15.0+cpu and a Release build, the
+benchmark harness measured a 1.497 ms median (1.515 ms mean) over three timed
+runs for 32 Gaussians, 1,728 voxels, and eight feature channels. One warm-up
+run is excluded. This is a small CPU reference-path measurement, not an
+end-to-end nuScenes or CUDA performance claim.
+
+Run the harness with:
+
+```powershell
+python benchmarks\benchmark_gaussian_voxel.py --resolution 12 --gaussians 32 --iterations 3
+```
+
+Still outstanding:
+
+1. CUDA spatial indexing, accumulation, and backward kernels, validated against
+   the CPU reference on a CUDA-enabled LibTorch installation.
+2. A configurable adaptive-refinement policy with explicit topology and work
+   budgets; callers can currently refine the reference grid using the existing
+   adaptive tensor API before rasterization.

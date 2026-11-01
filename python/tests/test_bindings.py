@@ -248,3 +248,62 @@ class TestGaussian:
         assert gaussian.l1_loss(a, a).item() == 0.0
         assert gaussian.l1_loss(a, b).item() > 0.0
         assert gaussian.ssim(a, a).item() == pytest.approx(1.0, abs=1e-4)
+
+
+gaussian_voxel = pytest.importorskip(
+    "riemannengine.gaussian_voxel", reason="built without Gaussian voxel support")
+occupancy = pytest.importorskip(
+    "riemannengine.occupancy", reason="built without occupancy support")
+
+
+def make_voxel_grid():
+    coordinates = torch.tensor(
+        [[x, y, z] for x in range(5) for y in range(5) for z in range(5)],
+        dtype=torch.int64)
+    levels = torch.zeros(len(coordinates), dtype=torch.int32)
+    config = re_.adaptive.AdaptiveVoxelConfig(
+        [1.0, 1.0, 1.0], origin=[-2.0, -2.0, -2.0])
+    return re_.adaptive.AdaptiveSparseTensor.from_voxels(
+        coordinates, levels, torch.zeros(len(coordinates), 1), config)
+
+
+class TestGaussianVoxel:
+    def test_rasterize_and_backward(self):
+        positions = torch.zeros(1, 3, requires_grad=True)
+        rotations = torch.tensor([[1.0, 0.0, 0.0, 0.0]], requires_grad=True)
+        scales = torch.full((1, 3), 0.5, requires_grad=True)
+        opacities = torch.full((1, 1), 0.8, requires_grad=True)
+        features = torch.tensor([[2.0, 3.0]], requires_grad=True)
+        gaussians = gaussian.GaussianTensor(
+            positions, rotations, scales, opacities,
+            torch.zeros(1, 3), features=features)
+        output = gaussian_voxel.rasterize(gaussians, make_voxel_grid())
+
+        assert output.density.shape == (125, 1)
+        assert output.occupancy.shape == (125, 1)
+        assert output.voxels.features.shape == (125, 2)
+        assert output.density.sum().item() > 0.0
+        (output.density.sum() + output.voxels.features.sum()).backward()
+        assert positions.grad is not None
+        assert scales.grad is not None
+        assert opacities.grad is not None
+        assert features.grad is not None
+
+
+class TestLidarOccupancy:
+    def test_ray_targets_and_masked_loss(self):
+        grid = make_voxel_grid()
+        points = torch.tensor([[1.2, -1.5, -1.5]])
+        origins = torch.tensor([[-1.9, -1.5, -1.5]])
+        targets = occupancy.from_lidar(
+            points, origins, torch.zeros(1, dtype=torch.int64), 1, grid)
+
+        assert targets.occupied.shape == (1, 125)
+        assert targets.observed.sum().item() == 4
+        assert targets.labels().sum().item() == 1
+        prediction = torch.full((1, 125), 0.4, requires_grad=True)
+        loss = occupancy.masked_binary_cross_entropy(prediction, targets)
+        loss.backward()
+        assert loss.item() > 0.0
+        assert prediction.grad is not None
+        assert prediction.grad[0, 124].item() == 0.0

@@ -605,6 +605,7 @@ if(RIEMANN_BUILD_TESTS AND RIEMANN_ENABLE_GAUSSIAN)
         tests/gaussian/test_gaussian_ply.cpp
         tests/gaussian/test_gaussian_render.cpp
         tests/gaussian/test_gaussian_voxel.cpp
+        tests/gaussian/test_lidar_occupancy.cpp
     )
 
     target_compile_definitions(gaussian_tests PRIVATE

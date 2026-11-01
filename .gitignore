@@ -15,7 +15,6 @@ build.ninja
 dist/
 cmake/
 !/cmake/
-cmake/RiemannEngineConfig.cmake.in
 
 # Jekyll docs preview
 docs/_site/
@@ -30,4 +29,3 @@ __pycache__/
 *.pyd
 *.egg-info/
 .pytest_cache/
-

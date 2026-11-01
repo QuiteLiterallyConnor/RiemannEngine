@@ -50,6 +50,14 @@ gaussian = getattr(_C, "gaussian", None)
 if gaussian is not None:
     _sys.modules[__name__ + ".gaussian"] = gaussian
 
+gaussian_voxel = getattr(_C, "gaussian_voxel", None)
+if gaussian_voxel is not None:
+    _sys.modules[__name__ + ".gaussian_voxel"] = gaussian_voxel
+
+occupancy = getattr(_C, "occupancy", None)
+if occupancy is not None:
+    _sys.modules[__name__ + ".occupancy"] = occupancy
+
 __all__ = [
     "CoordinateManager",
     "CoordinateMapKey",
@@ -69,8 +77,10 @@ __all__ = [
     "cuda_enabled",
     "dense_coordinates",
     "gaussian",
+    "gaussian_voxel",
     "mean",
     "nn",
+    "occupancy",
     "sparse_collate",
     "sum",
     "to_sparse",
