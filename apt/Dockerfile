@@ -13,14 +13,14 @@
 #
 # Build args
 # ----------
-#   VERSION     Semver string embedded in the package (default: 1.0.0)
+#   VERSION     Semver string embedded in the package (default: 1.1.0)
 #   JOBS        Parallel ninja jobs (default: 4)
 #   CUDA_VERSION  124, 132, or 134 (default: 134)
 #   CUDA_ARCHITECTURES  CMake GPU architectures (default: 86)
 #
 # =============================================================================
 
-ARG VERSION=1.0.0
+ARG VERSION=1.1.0
 ARG JOBS=4
 ARG CUDA_VERSION=134
 

@@ -20,7 +20,7 @@
 #
 # All flags and their defaults:
 #   --libtorch  PATH    Path to LibTorch root (required)
-#   --version   STRING  Package version          (default: 1.0.0)
+#   --version   STRING  Package version          (default: 1.1.0)
 #   --jobs      N       Parallel ninja jobs       (default: nproc)
 #   --build-dir PATH    CMake build directory     (default: <project>/build-deb)
 #   --output    PATH    Directory for .deb output (default: <script dir>)
@@ -35,7 +35,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-VERSION="1.0.0"
+VERSION="1.1.0"
 JOBS="$(nproc)"
 LIBTORCH_PATH=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

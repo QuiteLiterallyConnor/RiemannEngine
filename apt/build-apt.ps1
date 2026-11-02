@@ -13,7 +13,7 @@
 # Usage
 # -----
 #   .\apt\build-apt.ps1
-#   .\apt\build-apt.ps1 -Version 1.0.0 -Jobs 8 -OutputDir .\dist
+#   .\apt\build-apt.ps1 -Version 1.1.0 -Jobs 8 -OutputDir .\dist
 #
 # =============================================================================
 

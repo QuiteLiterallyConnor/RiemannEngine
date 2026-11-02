@@ -4,7 +4,7 @@ set -euo pipefail
 # Usage: ./scripts/create-release-tarball.sh <version> [staging-dir]
 # Creates a tar.gz containing include/, lib/, and lib/cmake/RiemannEngine
 
-VERSION=${1:-v1.0.0}
+VERSION=${1:-v1.1.0}
 STAGING_DIR=${2:-$(mktemp -d)}
 INSTALL_PREFIX=/usr/local
 
