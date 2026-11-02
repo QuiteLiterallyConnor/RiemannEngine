@@ -1,6 +1,9 @@
 #include "gaussian_voxel/voxelize.hpp"
 
 #include "octree/tree.hpp"
+#ifdef USE_CUDA
+#include "gaussian_voxel/cuda.hpp"
+#endif
 
 #include <ATen/ATen.h>
 #include <c10/util/Exception.h>
@@ -8,6 +11,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -42,10 +46,17 @@ void validate_options(const GaussianVoxelOptions &options) {
   }
 }
 
-void validate_cpu_gaussians(const gaussian::GaussianTensor &gaussians) {
-  TORCH_CHECK(gaussians.device().is_cpu(),
-              "Gaussian-to-voxel reference rasterization currently supports "
-              "CPU tensors only; CUDA execution is not implemented yet");
+void validate_gaussians(const gaussian::GaussianTensor &gaussians) {
+  TORCH_CHECK(gaussians.device().is_cpu() || gaussians.device().is_cuda(),
+              "Gaussian voxelization requires CPU or CUDA tensors");
+#ifndef USE_CUDA
+  TORCH_CHECK(!gaussians.device().is_cuda(),
+              "CUDA Gaussian voxelization requires a build with CPU_ONLY=OFF");
+#endif
+  TORCH_CHECK(at::isfinite(gaussians.positions()).all().item<bool>(),
+              "Gaussian means must be finite");
+  TORCH_CHECK(at::isfinite(gaussians.features()).all().item<bool>(),
+              "Gaussian features must be finite");
   const auto &scales = gaussians.scales();
   TORCH_CHECK(at::isfinite(scales).all().item<bool>() &&
                   (scales > 0).all().item<bool>(),
@@ -62,8 +73,8 @@ at::Tensor confidence_or_ones(const at::Tensor &confidence,
   if (!confidence.defined())
     return at::ones({gaussians.size(), 1}, gaussians.positions().options());
 
-  TORCH_CHECK(confidence.device().is_cpu(),
-              "confidence must be a CPU tensor for CPU reference rasterization");
+  TORCH_CHECK(confidence.device() == gaussians.device(),
+              "confidence and Gaussian tensors must use the same device");
   TORCH_CHECK(confidence.scalar_type() == gaussians.dtype(),
               "confidence and Gaussian tensors must use the same dtype");
   TORCH_CHECK((confidence.dim() == 1 && confidence.size(0) == gaussians.size()) ||
@@ -168,14 +179,23 @@ GaussianVoxelOutput rasterize(
     const adaptive::AdaptiveSparseTensor &reference,
     const GaussianVoxelOptions &options, const at::Tensor &confidence) {
   validate_options(options);
-  validate_cpu_gaussians(gaussians);
-  TORCH_CHECK(reference.device().is_cpu(),
-              "the initial Gaussian-to-voxel reference implementation "
-              "requires CPU reference features");
+  validate_gaussians(gaussians);
   TORCH_CHECK(reference.dimension() == 3,
               "Gaussian-to-voxel rasterization requires a 3D reference grid");
 
-  const auto associations = find_associations(gaussians, reference, options);
+  const auto confidence_values = confidence_or_ones(confidence, gaussians);
+  at::Tensor gaussian_ids, voxel_ids;
+#ifdef USE_CUDA
+  if (gaussians.device().is_cuda()) {
+    std::tie(gaussian_ids, voxel_ids) = cuda_associations(
+        gaussians.positions(), gaussians.covariances(), reference, options);
+  } else
+#endif
+  {
+    const auto associations = find_associations(gaussians, reference, options);
+    gaussian_ids = long_tensor(associations.gaussian);
+    voxel_ids = long_tensor(associations.voxel);
+  }
   const int64_t voxel_count = reference.size();
   const int64_t channels = gaussians.feature_channels();
   const auto &positions = gaussians.positions();
@@ -183,9 +203,7 @@ GaussianVoxelOutput rasterize(
   auto density = at::zeros({voxel_count, 1}, options_tensor);
   auto feature_sum = at::zeros({voxel_count, channels}, options_tensor);
 
-  if (!associations.gaussian.empty()) {
-    auto gaussian_ids = long_tensor(associations.gaussian);
-    auto voxel_ids = long_tensor(associations.voxel);
+  if (gaussian_ids.numel() > 0) {
     auto covariances = gaussians.covariances();
     auto precision = at::linalg_inv(covariances);
     auto determinants = at::linalg_det(covariances);
@@ -195,50 +213,58 @@ GaussianVoxelOutput rasterize(
 
     const auto centers = reference.centers().slice(1, 0, 3).to(options_tensor);
     const auto voxel_volumes = reference.volumes().to(options_tensor);
-    const auto selected_centers = centers.index_select(0, voxel_ids);
-    const auto selected_positions = positions.index_select(0, gaussian_ids);
-    const auto delta = selected_centers - selected_positions;
-    const auto selected_precision = precision.index_select(0, gaussian_ids);
-    const auto quadratic =
-        at::bmm(at::bmm(delta.unsqueeze(1), selected_precision),
-                delta.unsqueeze(2))
-            .reshape({-1, 1})
-            .clamp_min(0.0);
-
-    auto amplitudes = gaussians.opacities().index_select(0, gaussian_ids) *
-                     confidence_or_ones(confidence, gaussians)
-                         .index_select(0, gaussian_ids) *
-                     options.opacity_density_scale;
+    auto amplitudes = gaussians.opacities() * confidence_values *
+                      options.opacity_density_scale;
     const auto normalization =
-        (std::pow(kTwoPi, 1.5) *
-         determinants.index_select(0, gaussian_ids).sqrt())
-            .reciprocal()
-            .unsqueeze(1);
-    const auto contribution =
-        amplitudes * normalization * at::exp(-0.5 * quadratic) *
-        voxel_volumes.index_select(0, voxel_ids).unsqueeze(1);
-    density = density.index_add(0, voxel_ids, contribution);
+        (std::pow(kTwoPi, 1.5) * determinants.sqrt()).reciprocal();
+#ifdef USE_CUDA
+    if (gaussians.device().is_cuda()) {
+      std::tie(density, feature_sum) = cuda_accumulate(
+          positions, precision, normalization, amplitudes, gaussians.features(),
+          gaussian_ids, voxel_ids, centers, voxel_volumes);
+    } else
+#endif
+    {
+      const auto selected_centers = centers.index_select(0, voxel_ids);
+      const auto selected_positions = positions.index_select(0, gaussian_ids);
+      const auto delta = selected_centers - selected_positions;
+      const auto selected_precision = precision.index_select(0, gaussian_ids);
+      const auto quadratic =
+          at::bmm(at::bmm(delta.unsqueeze(1), selected_precision),
+                  delta.unsqueeze(2))
+              .reshape({-1, 1})
+              .clamp_min(0.0);
 
-    if (channels > 0) {
-      const auto feature_values =
-          gaussians.features().index_select(0, gaussian_ids);
-      const auto weighted_features = feature_values * contribution;
-      feature_sum = feature_sum.index_add(0, voxel_ids, weighted_features);
-      if (options.feature_aggregation ==
-          FeatureAggregation::NormalizedWeightedMean) {
-        const auto weights =
-            at::zeros({voxel_count, 1}, options_tensor)
-                .index_add(0, voxel_ids, contribution);
-        const double denominator_floor =
-            positions.scalar_type() == at::kFloat
-                ? static_cast<double>(std::numeric_limits<float>::min())
-                : std::numeric_limits<double>::min();
-        feature_sum =
-            feature_sum / weights.clamp_min(denominator_floor);
+      const auto contribution =
+          amplitudes.index_select(0, gaussian_ids) *
+          normalization.index_select(0, gaussian_ids).unsqueeze(1) *
+          at::exp(-0.5 * quadratic) *
+          voxel_volumes.index_select(0, voxel_ids).unsqueeze(1);
+      density = density.index_add(0, voxel_ids, contribution);
+
+      if (channels > 0) {
+        const auto feature_values =
+            gaussians.features().index_select(0, gaussian_ids);
+        const auto weighted_features = feature_values * contribution;
+        feature_sum = feature_sum.index_add(0, voxel_ids, weighted_features);
       }
     }
+    if (channels > 0 && options.feature_aggregation ==
+                            FeatureAggregation::NormalizedWeightedMean) {
+      const double denominator_floor =
+          positions.scalar_type() == at::kFloat
+              ? static_cast<double>(std::numeric_limits<float>::min())
+              : std::numeric_limits<double>::min();
+      feature_sum = feature_sum / density.clamp_min(denominator_floor);
+    }
   } else {
-    (void)confidence_or_ones(confidence, gaussians);
+    // Keep an empty-support forward connected to every continuous input.
+    const auto zero = (positions * 0).sum() + (gaussians.rotations() * 0).sum() +
+                      (gaussians.scales() * 0).sum() +
+                      (gaussians.opacities() * 0).sum() +
+                      (gaussians.features() * 0).sum() + (confidence_values * 0).sum();
+    density = density + zero;
+    feature_sum = feature_sum + zero;
   }
 
   at::Tensor occupancy;

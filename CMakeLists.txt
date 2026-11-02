@@ -240,6 +240,7 @@ if(NOT CPU_ONLY)
     if(RIEMANN_ENABLE_GAUSSIAN)
         file(GLOB RIEMANN_GAUSSIAN_GPU_SOURCES CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/splat/*.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/gaussian_voxel/*.cu"
         )
         list(APPEND RIEMANN_GPU_SOURCES ${RIEMANN_GAUSSIAN_GPU_SOURCES})
     endif()

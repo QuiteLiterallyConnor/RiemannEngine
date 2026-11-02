@@ -82,6 +82,44 @@ trainer = re.gaussian.GaussianTrainer(model)
 result = trainer.step(camera, target_image)
 ```
 
+### Gaussian-to-voxel accumulation and automatic refinement
+
+```python
+device = "cpu"  # use "cuda" with CUDA PyTorch and a CPU_ONLY=OFF extension
+config = re.adaptive.AdaptiveVoxelConfig([1.0, 1.0, 1.0], max_depth=2)
+reference = re.adaptive.AdaptiveSparseTensor.from_voxels(
+    torch.zeros(1, 3, dtype=torch.int64),
+    torch.zeros(1, dtype=torch.int32), torch.zeros(1, 1), config)
+positions = torch.full((1, 3), 0.5, device=device, requires_grad=True)
+gaussians = re.gaussian.GaussianTensor(
+    positions,
+    torch.tensor([[1.0, 0.0, 0.0, 0.0]], device=device),
+    torch.full((1, 3), 0.4, device=device),
+    torch.full((1, 1), 0.8, device=device),
+    torch.zeros(1, 3, device=device),
+    features=torch.ones(1, 8, device=device))
+policy = re.gaussian_voxel.AdaptiveRefinementOptions()
+policy.max_depth = 2
+policy.max_voxels = 64
+result = re.gaussian_voxel.rasterize_adaptive(
+    gaussians, reference, refinement=policy)
+result.rasterized.density.sum().backward()
+print(result.leaf_counts, result.stop_reason)
+```
+
+For fixed topology, use `re.gaussian_voxel.rasterize`. Both paths support
+float32/float64 and arbitrary feature widths. Topology decisions are discrete;
+the final values remain differentiable. Reference geometry stays on CPU while
+Gaussian arrays, accumulation and backward run on their selected device.
+`re.gaussian_voxel.cuda_available()` reports compiled kernel support, distinct
+from `torch.cuda.is_available()` runtime availability.
+
+The [Gaussian voxelization guide](../docs/gaussian-voxel.md) explains the
+refinement criteria/budgets, LiDAR supervision, CUDA builds, and the nuScenes
+camera-only occupancy workflow. Its optional adaptive integration still feeds
+a uniform-grid decoder; the exported adaptive Gaussian occupancy is not the
+decoder's prediction.
+
 ## Package layout
 
 | Module | Contents |
@@ -90,6 +128,9 @@ result = trainer.step(camera, target_image)
 | `riemannengine.nn` | `RiemannConvolution`, `RiemannConvolutionTranspose`, `RiemannLinear`, `RiemannBatchNorm`, poolings, 25+ activations, `BasicBlock`/`Bottleneck`, squeeze-excitation blocks, broadcast/pruning/union ops |
 | `riemannengine.adaptive` | `AdaptiveSparseTensor`, `AdaptiveVoxelConfig`, `AxisAlignedRegion`, `convolution`, `pool`, `interpolate`, refinement/coarsening |
 | `riemannengine.gaussian` | `GaussianTensor`, `GaussianModel`, `Camera`, `render`, PLY I/O, `GaussianTrainer`, `l1_loss`, `ssim` |
+| `riemannengine.gaussian_voxel` | CPU/CUDA `rasterize`, `rasterize_adaptive`, density/feature aggregation, occupancy mapping, refinement options |
+| `riemannengine.occupancy` | CPU LiDAR ray targets and observed-only binary cross entropy |
+| `riemannengine.camera_occupancy` | Image-conditioned occupancy network, grid/refinement specifications, loss/metrics and checkpoints |
 
 ## Development
 

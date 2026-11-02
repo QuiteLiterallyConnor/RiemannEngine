@@ -2,6 +2,7 @@
 
 #include "gaussian_voxel/occupancy.hpp"
 #include "gaussian_voxel/voxelize.hpp"
+#include "gaussian_voxel/refine.hpp"
 
 namespace py = pybind11;
 using namespace riemann::gaussian_voxel;
@@ -10,6 +11,29 @@ using namespace riemann::occupancy;
 namespace riemann_py {
 
 void bind_gaussian_voxel(py::module_ &voxel_module, py::module_ &occupancy_module) {
+  voxel_module.def("cuda_available", [] {
+#ifdef USE_CUDA
+    return true;
+#else
+    return false;
+#endif
+  }, "Whether this extension was compiled with Gaussian voxel CUDA kernels.");
+  py::enum_<RefinementCriterion>(voxel_module, "RefinementCriterion")
+      .value("Density", RefinementCriterion::Density)
+      .value("OccupancyUncertainty", RefinementCriterion::OccupancyUncertainty);
+  py::class_<AdaptiveRefinementOptions>(voxel_module, "AdaptiveRefinementOptions")
+      .def(py::init<>())
+      .def_readwrite("criterion", &AdaptiveRefinementOptions::criterion)
+      .def_readwrite("score_threshold", &AdaptiveRefinementOptions::score_threshold)
+      .def_readwrite("min_density", &AdaptiveRefinementOptions::min_density)
+      .def_readwrite("max_depth", &AdaptiveRefinementOptions::max_depth)
+      .def_readwrite("max_voxels", &AdaptiveRefinementOptions::max_voxels)
+      .def_readwrite("max_splits_per_iteration", &AdaptiveRefinementOptions::max_splits_per_iteration)
+      .def_readwrite("max_iterations", &AdaptiveRefinementOptions::max_iterations);
+  py::class_<AdaptiveGaussianVoxelOutput>(voxel_module, "AdaptiveGaussianVoxelOutput")
+      .def_readonly("rasterized", &AdaptiveGaussianVoxelOutput::rasterized)
+      .def_readonly("leaf_counts", &AdaptiveGaussianVoxelOutput::leaf_counts)
+      .def_readonly("stop_reason", &AdaptiveGaussianVoxelOutput::stop_reason);
   py::enum_<FeatureAggregation>(voxel_module, "FeatureAggregation")
       .value("WeightedSum", FeatureAggregation::WeightedSum)
       .value("NormalizedWeightedMean",
@@ -50,6 +74,23 @@ void bind_gaussian_voxel(py::module_ &voxel_module, py::module_ &occupancy_modul
       py::arg("confidence") = py::none(),
       py::call_guard<py::gil_scoped_release>(),
       "Rasterizes Gaussian features onto a fixed adaptive topology.");
+
+  voxel_module.def(
+      "rasterize_adaptive",
+      [](const riemann::gaussian::GaussianTensor &gaussians,
+         const riemann::adaptive::AdaptiveSparseTensor &reference,
+         const GaussianVoxelOptions &options,
+         const AdaptiveRefinementOptions &refinement,
+         c10::optional<at::Tensor> confidence) {
+        return rasterize_adaptive(gaussians, reference, options, refinement,
+                                  confidence.value_or(at::Tensor()));
+      },
+      py::arg("gaussians"), py::arg("reference"),
+      py::arg("options") = GaussianVoxelOptions{},
+      py::arg("refinement") = AdaptiveRefinementOptions{},
+      py::arg("confidence") = py::none(),
+      py::call_guard<py::gil_scoped_release>(),
+      "Automatically refines scored leaves within explicit depth/work/leaf budgets.");
 
   py::class_<LidarRayOptions>(occupancy_module, "LidarRayOptions")
       .def(py::init<>())

@@ -1,14 +1,18 @@
 #include "gaussian_voxel/voxelize.hpp"
+#include "gaussian_voxel/refine.hpp"
 #ifdef CHECK
 #undef CHECK
 #endif
 #include "utils/test_framework.hpp"
 
 #include <functional>
+#include <cmath>
 #include <vector>
 
 #ifdef USE_CUDA
 #include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAGuard.h>
 #endif
 
 using riemann::adaptive::AdaptiveSparseTensor;
@@ -308,13 +312,243 @@ TEST(gaussian_voxel_parameter_gradients_match_finite_differences) {
   });
 }
 
-TEST(gaussian_voxel_cuda_inputs_fail_explicitly) {
+TEST(gaussian_voxel_cuda_forward_backward_matches_cpu) {
 #ifdef USE_CUDA
   if (!at::cuda::is_available())
     throw riemann_test::Skip("CUDA runtime or device is unavailable");
-  auto gaussians = GaussianTensor::empty(
-      0, at::TensorOptions().dtype(at::kFloat).device(at::kCUDA), 1);
-  auto grid = make_uniform_grid(-1, 1);
-  CHECK_THROWS(rasterize(gaussians, grid));
+  // A nondefault stream catches launches accidentally using the default stream.
+  const c10::cuda::CUDAStreamGuard stream(c10::cuda::getStreamFromPool());
+  for (auto dtype : {at::kFloat, at::kDouble})
+    for (auto aggregation : {FeatureAggregation::WeightedSum,
+                             FeatureAggregation::NormalizedWeightedMean})
+      for (auto model : {OccupancyModel::Poisson, OccupancyModel::ClampedLinear}) {
+        auto grid = make_mixed_grid();
+        const auto opts = at::TensorOptions().dtype(dtype);
+        std::vector<at::Tensor> cpu{
+            at::tensor({1.2, 1.4, 1.7, 3.8, 2.2, 1.4}, opts).reshape({2, 3}),
+            at::tensor({1., .2, -.1, .3, 1., -.3, .1, .2}, opts).reshape({2, 4}),
+            at::tensor({.7, .8, .9, .8, .6, .9}, opts).reshape({2, 3}),
+            at::tensor({.7, .4}, opts).reshape({2, 1}),
+            at::arange(10, opts).reshape({2, 5}) / 10,
+            at::tensor({.8, 0.}, opts)};
+        std::vector<at::Tensor> gpu;
+        for (auto &value : cpu) {
+          value.set_requires_grad(true);
+          gpu.push_back(value.detach().to(at::kCUDA).set_requires_grad(true));
+        }
+        GaussianVoxelOptions options;
+        options.feature_aggregation = aggregation;
+        options.occupancy_model = model;
+        auto left = rasterize(make_gaussians(cpu[0], cpu[1], cpu[2], cpu[3], cpu[4]),
+                              grid, options, cpu[5]);
+        auto right = rasterize(make_gaussians(gpu[0], gpu[1], gpu[2], gpu[3], gpu[4]),
+                               grid.to(at::kCUDA), options, gpu[5]);
+        const double tolerance = dtype == at::kFloat ? 2e-4 : 2e-10;
+        CHECK_ALLCLOSE(right.density.cpu(), left.density, tolerance, tolerance);
+        CHECK_ALLCLOSE(right.occupancy.cpu(), left.occupancy, tolerance, tolerance);
+        CHECK_ALLCLOSE(right.voxels.features().cpu(), left.voxels.features(),
+                       tolerance, tolerance);
+        auto loss = [](const GaussianVoxelOutput &output) {
+          return output.voxels.features().square().sum() +
+                 output.density.square().sum() + output.occupancy.sum();
+        };
+        loss(left).backward();
+        loss(right).backward();
+        for (size_t i = 0; i < cpu.size(); ++i)
+          CHECK_ALLCLOSE(gpu[i].grad().cpu(), cpu[i].grad(), tolerance, tolerance);
+        options.max_associations = 1;
+        CHECK_THROWS(rasterize(make_gaussians(gpu[0], gpu[1], gpu[2], gpu[3], gpu[4]),
+                               grid, options));
+      }
+#else
+  throw riemann_test::Skip("CUDA kernels are not compiled in this build");
 #endif
+}
+
+TEST(gaussian_voxel_empty_support_keeps_zero_gradients) {
+  for (auto device : {at::Device(at::kCPU)
+#ifdef USE_CUDA
+                      , at::Device(at::kCUDA)
+#endif
+       }) {
+#ifdef USE_CUDA
+    if (device.is_cuda() && !at::cuda::is_available())
+      continue;
+#endif
+    auto options = at::TensorOptions().dtype(at::kDouble).device(device);
+    auto positions = at::full({1, 3}, 100., options).set_requires_grad(true);
+    auto rotations = at::tensor({1., 0., 0., 0.}, options).reshape({1, 4});
+    auto scales = at::ones({1, 3}, options);
+    auto opacity = at::ones({1, 1}, options).set_requires_grad(true);
+    auto features = at::empty({1, 0}, options).set_requires_grad(true);
+    auto result = rasterize(make_gaussians(positions, rotations, scales, opacity,
+                                          features), make_uniform_grid(-1, 1));
+    result.density.sum().backward();
+    CHECK_EQ(result.density.sum().item<double>(), 0.);
+    CHECK_EQ(positions.grad().abs().sum().item<double>(), 0.);
+    CHECK_EQ(opacity.grad().abs().sum().item<double>(), 0.);
+    auto empty = GaussianTensor::empty(0, options, 0);
+    CHECK_EQ(rasterize(empty, make_uniform_grid(-1, 1)).density.sum().item<double>(), 0.);
+  }
+}
+
+TEST(gaussian_voxel_adaptive_refinement_obeys_budgets_and_preserves_input) {
+  auto coords = at::tensor({0, 0, 0, 1, 0, 0}, at::kLong).reshape({2, 3});
+  AdaptiveVoxelConfig config;
+  config.base_voxel_size = {1., 1., 1.};
+  config.max_depth = 3;
+  auto grid = AdaptiveSparseTensor::from_voxels(
+      coords, at::zeros({2}, at::kInt), at::zeros({2, 1}, at::kDouble), config);
+  const auto version = grid.topology_version();
+  auto positions = at::tensor({.5, .5, .5}, at::kDouble).reshape({1, 3});
+  positions.set_requires_grad(true);
+  auto gaussians = make_gaussians(
+      positions, at::tensor({1., 0., 0., 0.}, at::kDouble).reshape({1, 4}),
+      at::full({1, 3}, .3, at::kDouble), at::ones({1, 1}, at::kDouble),
+      at::ones({1, 2}, at::kDouble));
+  AdaptiveRefinementOptions refine;
+  refine.criterion = RefinementCriterion::Density;
+  refine.score_threshold = .01;
+  refine.max_depth = 3;
+  refine.max_voxels = 16;
+  refine.max_splits_per_iteration = 1;
+  refine.max_iterations = 10;
+  auto result = rasterize_adaptive(gaussians, grid, {}, refine);
+  CHECK_EQ(result.rasterized.voxels.size(), 16);
+  CHECK(result.leaf_counts == std::vector<int64_t>({2, 9, 16}));
+  CHECK(result.stop_reason == "max_voxels");
+  CHECK(!result.rasterized.voxels.has_overlapping_leaves());
+  CHECK_EQ(grid.topology_version(), version);
+  CHECK_EQ(grid.size(), 2);
+  CHECK_ALLCLOSE(result.rasterized.voxels.volumes().sum(), grid.volumes().sum(), 1e-12, 1e-12);
+  auto repeat = rasterize_adaptive(gaussians, grid, {}, refine);
+  CHECK(at::equal(result.rasterized.voxels.coordinates(), repeat.rasterized.voxels.coordinates()));
+  result.rasterized.density.sum().backward();
+  CHECK(at::isfinite(positions.grad()).all().item<bool>());
+  CHECK(positions.grad().abs().sum().item<double>() > 0);
+  refine.max_voxels = 1;
+  CHECK_THROWS(rasterize_adaptive(gaussians, grid, {}, refine));
+  refine.max_voxels = 100;
+  refine.max_depth = 4;
+  CHECK_THROWS(rasterize_adaptive(gaussians, grid, {}, refine));
+}
+
+TEST(gaussian_voxel_refinement_threshold_depth_and_iteration_stops) {
+  AdaptiveVoxelConfig config;
+  config.base_voxel_size = {1., 1., 1.};
+  config.max_depth = 1;
+  auto grid = AdaptiveSparseTensor::from_voxels(
+      at::zeros({1, 3}, at::kLong), at::zeros({1}, at::kInt),
+      at::zeros({1, 1}, at::kDouble), config);
+  auto gaussians = make_gaussians(
+      at::full({1, 3}, .5, at::kDouble),
+      at::tensor({1., 0., 0., 0.}, at::kDouble).reshape({1, 4}),
+      at::ones({1, 3}, at::kDouble), at::ones({1, 1}, at::kDouble),
+      at::empty({1, 0}, at::kDouble));
+  AdaptiveRefinementOptions refine;
+  refine.max_depth = 1;
+  refine.score_threshold = 1;
+  CHECK(rasterize_adaptive(gaussians, grid, {}, refine).stop_reason == "threshold");
+  refine.score_threshold = 0;
+  refine.max_iterations = 1;
+  auto one = rasterize_adaptive(gaussians, grid, {}, refine);
+  CHECK_EQ(one.rasterized.voxels.size(), 8);
+  CHECK(one.stop_reason == "max_iterations");
+  refine.max_iterations = 2;
+  CHECK(rasterize_adaptive(gaussians, grid, {}, refine).stop_reason == "max_depth");
+  refine.max_iterations = 0;
+  CHECK_EQ(rasterize_adaptive(gaussians, grid, {}, refine).rasterized.voxels.size(), 1);
+}
+
+TEST(gaussian_voxel_cuda_adaptive_topology_matches_cpu) {
+#ifdef USE_CUDA
+  if (!at::cuda::is_available())
+    throw riemann_test::Skip("CUDA runtime or device is unavailable");
+  const c10::cuda::CUDAStreamGuard stream(c10::cuda::getStreamFromPool());
+  auto grid = make_mixed_grid();
+  auto positions = at::tensor({1.21, 1.43, 1.71}, at::kDouble).reshape({1, 3});
+  auto rotations = at::tensor({1., .2, -.1, .3}, at::kDouble).reshape({1, 4});
+  auto scales = at::full({1, 3}, .7, at::kDouble);
+  auto opacity = at::full({1, 1}, .7, at::kDouble);
+  auto features = at::full({1, 3}, 2., at::kDouble);
+  AdaptiveRefinementOptions refine;
+  refine.max_depth = 1;
+  refine.max_voxels = grid.size() + 7;
+  refine.max_iterations = 3;
+  refine.score_threshold = 0;
+  auto left = rasterize_adaptive(
+      make_gaussians(positions, rotations, scales, opacity, features), grid, {}, refine);
+  auto right = rasterize_adaptive(
+      make_gaussians(positions.cuda(), rotations.cuda(), scales.cuda(),
+                     opacity.cuda(), features.cuda()), grid, {}, refine);
+  CHECK(left.leaf_counts == right.leaf_counts);
+  CHECK(left.stop_reason == right.stop_reason);
+  CHECK(at::equal(left.rasterized.voxels.coordinates(), right.rasterized.voxels.coordinates()));
+  CHECK(at::equal(left.rasterized.voxels.levels(), right.rasterized.voxels.levels()));
+  CHECK_ALLCLOSE(right.rasterized.density.cpu(), left.rasterized.density, 1e-10, 1e-10);
+#else
+  throw riemann_test::Skip("CUDA kernels are not compiled in this build");
+#endif
+}
+
+TEST(gaussian_voxel_cuda_density_only_and_total_pair_limit) {
+#ifdef USE_CUDA
+  if (!at::cuda::is_available())
+    throw riemann_test::Skip("CUDA runtime or device is unavailable");
+  AdaptiveVoxelConfig config;
+  config.base_voxel_size = {1., 1., 1.};
+  auto grid = AdaptiveSparseTensor::from_voxels(
+      at::zeros({1, 3}, at::kLong), at::zeros({1}, at::kInt),
+      at::zeros({1, 1}), config);
+  const auto options = at::TensorOptions().device(at::kCUDA).dtype(at::kDouble);
+  auto positions = at::full({2, 3}, .41, options).set_requires_grad(true);
+  auto gaussians = make_gaussians(
+      positions, at::tensor({1., 0., 0., 0.}, options).reshape({1, 4}).repeat({2, 1}),
+      at::full({2, 3}, .1, options), at::full({2, 1}, .5, options),
+      at::empty({2, 0}, options));
+  auto output = rasterize(gaussians, grid);
+  CHECK_EQ(output.voxels.channels(), 0);
+  output.density.sum().backward();
+  CHECK(at::isfinite(positions.grad()).all().item<bool>());
+  CHECK(positions.grad().abs().sum().item<double>() > 0);
+  const auto second_order = rasterize(gaussians, grid).density.sum();
+  CHECK_THROWS(torch::autograd::grad(
+      {second_order}, {positions}, {}, false, true));
+  GaussianVoxelOptions bounded;
+  bounded.max_associations = 1; // Each support fits; the combined pair count does not.
+  CHECK_THROWS(rasterize(gaussians, grid, bounded));
+#else
+  throw riemann_test::Skip("CUDA kernels are not compiled in this build");
+#endif
+}
+
+TEST(gaussian_voxel_refinement_improves_midpoint_integration) {
+  AdaptiveVoxelConfig config;
+  config.base_voxel_size = {1., 1., 1.};
+  config.max_depth = 2;
+  auto grid = AdaptiveSparseTensor::from_voxels(
+      at::zeros({1, 3}, at::kLong), at::zeros({1}, at::kInt),
+      at::zeros({1, 1}, at::kDouble), config);
+  auto gaussians = make_gaussians(
+      at::full({1, 3}, .5, at::kDouble),
+      at::tensor({1., 0., 0., 0.}, at::kDouble).reshape({1, 4}),
+      at::full({1, 3}, .15, at::kDouble), at::ones({1, 1}, at::kDouble),
+      at::empty({1, 0}, at::kDouble));
+  GaussianVoxelOptions options;
+  options.support_radius = 4;
+  AdaptiveRefinementOptions refine;
+  refine.criterion = RefinementCriterion::Density;
+  refine.score_threshold = 0;
+  refine.min_density = 0;
+  refine.max_voxels = 64;
+  const double exact = std::pow(std::erf(.5 / (.15 * std::sqrt(2.))), 3);
+  const double initial = rasterize(gaussians, grid, options).density.sum().item<double>();
+  const auto refined = rasterize_adaptive(gaussians, grid, options, refine);
+  const double actual = refined.rasterized.density.sum().item<double>();
+  CHECK(refined.leaf_counts == std::vector<int64_t>({1, 8, 64}));
+  CHECK(std::fabs(actual - exact) < .005);
+  CHECK(std::fabs(actual - exact) < std::fabs(initial - exact) / 100);
+  options.max_associations = 30; // Initial support fits; finer support does not.
+  CHECK_THROWS(rasterize_adaptive(gaussians, grid, options, refine));
+  CHECK_EQ(grid.size(), 1);
 }

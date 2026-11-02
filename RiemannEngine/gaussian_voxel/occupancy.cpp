@@ -69,9 +69,6 @@ void mark_ray(const adaptive::detail::Topology &topology,
   const double march_distance = std::min(distance, max_distance);
   if (march_distance > 0.0) {
     const auto cell = topology.extent_at(topology.max_depth);
-    const double probe_t =
-        std::min(std::min(cell[0], std::min(cell[1], cell[2])) * 1e-8,
-                 march_distance * 1e-8);
     Vec3 next_crossing{};
     Vec3 crossing_step{};
 
@@ -82,11 +79,11 @@ void mark_ray(const adaptive::detail::Topology &topology,
         continue;
       }
 
-      const double probe = origin[d] + direction[d] * probe_t;
       const double coordinate =
-          std::floor((probe - topology.origin[d]) / cell[d]);
+          (origin[d] - topology.origin[d]) / cell[d];
       const double boundary_index =
-          direction[d] > 0.0 ? coordinate + 1.0 : coordinate;
+          direction[d] > 0.0 ? std::floor(coordinate) + 1.0
+                             : std::ceil(coordinate) - 1.0;
       const double boundary =
           topology.origin[d] + boundary_index * cell[d];
       next_crossing[d] = (boundary - origin[d]) / direction[d];

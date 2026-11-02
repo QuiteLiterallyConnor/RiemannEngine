@@ -69,6 +69,16 @@ TEST(lidar_dda_does_not_skip_short_cells_near_corner_crossings) {
   CHECK(targets.free[0][voxel(grid, -2, -1, -2)].item<bool>());
 }
 
+TEST(lidar_dda_handles_nearly_parallel_rays_starting_on_a_boundary) {
+  auto grid = make_grid();
+  auto points = at::tensor({1.2, -1e-20, 0.5}, at::kDouble).reshape({1, 3});
+  auto origins = at::tensor({0.0, 0.0, 0.5}, at::kDouble).reshape({1, 3});
+  auto targets = from_lidar(points, origins, at::zeros({1}, at::kLong),
+                            1, grid);
+  CHECK_EQ(targets.occupied.sum().item<int64_t>(), 1);
+  CHECK(targets.observed.any().item<bool>());
+}
+
 TEST(lidar_batch_ids_keep_scene_targets_separate) {
   auto grid = make_grid();
   auto points =

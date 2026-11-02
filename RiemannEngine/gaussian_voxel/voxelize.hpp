@@ -34,7 +34,7 @@ struct GaussianVoxelOutput {
 };
 
 // Rasterizes activated Gaussians onto the immutable reference topology.
-// The initial reference implementation requires CPU tensors and a 3D grid.
+// Supports CPU and, in CUDA builds, CUDA float32/float64 on a 3D grid.
 // Support selection is discrete; all values within the selected support are
 // differentiable with respect to the Gaussian parameters and optional weights.
 GaussianVoxelOutput rasterize(

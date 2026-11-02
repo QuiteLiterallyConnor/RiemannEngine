@@ -8,6 +8,8 @@
 [![Documentation](https://img.shields.io/badge/Docs-GitHub%20Pages-222222?logo=github&logoColor=white&style=for-the-badge)](https://quiteliterallyconnor.github.io/RiemannEngine/)
 [![Releases](https://img.shields.io/badge/Download-Releases-2ea44f?logo=github&logoColor=white&style=for-the-badge)](https://github.com/QuiteLiterallyConnor/RiemannEngine/releases)
 
+<img src="assets/splat.gif" alt="3D Gaussian splat rendering" width="49%" /> <img src="assets/voxels.gif" alt="Adaptive mixed-resolution voxelization" width="49%" />
+
 </div>
 
 ## Features
@@ -36,6 +38,13 @@
 - **Differentiable rasterizer** with fused CUDA forward/backward kernels, plus a LibTorch fallback on CPU.
 - A 3DGS-style `GaussianTrainer` with densification, pruning and opacity reset, and PLY export.
 - On an RTX 3080, a 139K-Gaussian scene loads in about 17–37 ms and a 512×512 render takes about 6 ms.
+
+### Gaussian-to-voxel occupancy
+- Differentiable CPU/CUDA Gaussian density and arbitrary-width feature accumulation onto mixed-resolution voxel leaves, with gradients for geometry, opacity, confidence and features.
+- Automatic density- or occupancy-uncertainty-driven octree refinement with explicit depth, leaf-count, split-count, iteration and association limits.
+- LiDAR occupied/free/unknown supervision (ego-filtered, multi-sweep free space, weak column-ceiling prior for unknown space) and an image-only nuScenes camera occupancy example with resumable training, scene-disjoint evaluation and geometry renders.
+- Refinement decisions are discrete. The camera example integrates over adaptive leaves but retains its uniform-grid occupancy decoder; this is not complete-scene or photorealistic reconstruction.
+- See the [Gaussian voxelization guide](docs/gaussian-voxel.md) for APIs, CUDA builds, budgets, validation and limitations.
 
 ### Native, GPU-first C++
 - C++20 static library (`riemann_cpp`) with a relocatable CMake package (`find_package(RiemannEngine)`).
@@ -447,6 +456,18 @@ torch.optim.SGD(conv.parameters(), lr=0.1).step()
 ```
 
 With a CPU-only torch the build automatically produces a CPU-only engine; with a CUDA torch the matching CUDA toolkit is required. See [python/README.md](python/README.md) for the full guide, including `riemannengine.adaptive` and `riemannengine.gaussian` examples.
+
+For the camera occupancy workflow (also requires NumPy and Pillow):
+
+```powershell
+python examples\gaussian_voxel_nuscenes.py --root D:\nuScenes --mode train --device cuda --adaptive-refinement --refine-depth 2 --refine-max-voxels 30000 --refine-splits 256 --steps 1000
+```
+
+Use `--device cpu` with a CPU build. CUDA requires both CUDA-enabled PyTorch
+and bindings compiled with `CPU_ONLY=OFF`; requesting it never silently falls
+back to CPU. Refinement is opt-in and saved in checkpoints. See the
+[workflow guide](docs/gaussian-voxel.md#camera-to-occupancy-training-pipeline)
+before interpreting the generated geometry.
 
 ---
 
