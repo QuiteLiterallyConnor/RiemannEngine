@@ -21,6 +21,7 @@ add_library(riemann_python MODULE
 if(RIEMANN_ENABLE_GAUSSIAN)
     target_sources(riemann_python PRIVATE
         src/gaussian_bindings.cpp
+        src/gaussian_voxel_bindings.cpp
     )
 endif()
 

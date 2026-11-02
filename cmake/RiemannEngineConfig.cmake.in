@@ -1,0 +1,22 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Torch)
+if(NOT @CPU_ONLY@)
+    find_dependency(CUDAToolkit)
+endif()
+if(@RIEMANN_PKG_USES_OPENMP_TARGET@)
+    find_dependency(OpenMP COMPONENTS CXX)
+endif()
+
+if(NOT TARGET RiemannEngine::torch)
+    add_library(RiemannEngine::torch INTERFACE IMPORTED)
+    target_link_libraries(RiemannEngine::torch INTERFACE ${TORCH_LIBRARIES})
+    target_include_directories(RiemannEngine::torch INTERFACE ${TORCH_INCLUDE_DIRS})
+    if(TORCH_CXX_FLAGS)
+        separate_arguments(_riemann_torch_flags NATIVE_COMMAND "${TORCH_CXX_FLAGS}")
+        target_compile_options(RiemannEngine::torch INTERFACE ${_riemann_torch_flags})
+    endif()
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/RiemannEngineTargets.cmake")

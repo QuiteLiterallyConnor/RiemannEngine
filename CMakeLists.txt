@@ -220,6 +220,7 @@ list(FILTER RIEMANN_CPU_SOURCES EXCLUDE REGEX ".*example.*")
 if(RIEMANN_ENABLE_GAUSSIAN)
     file(GLOB RIEMANN_GAUSSIAN_CPU_SOURCES CONFIGURE_DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/splat/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/gaussian_voxel/*.cpp"
     )
     list(APPEND RIEMANN_CPU_SOURCES ${RIEMANN_GAUSSIAN_CPU_SOURCES})
 endif()
@@ -239,6 +240,7 @@ if(NOT CPU_ONLY)
     if(RIEMANN_ENABLE_GAUSSIAN)
         file(GLOB RIEMANN_GAUSSIAN_GPU_SOURCES CONFIGURE_DEPENDS
             "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/splat/*.cu"
+            "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/gaussian_voxel/*.cu"
         )
         list(APPEND RIEMANN_GPU_SOURCES ${RIEMANN_GAUSSIAN_GPU_SOURCES})
     endif()
@@ -603,6 +605,8 @@ if(RIEMANN_BUILD_TESTS AND RIEMANN_ENABLE_GAUSSIAN)
         tests/gaussian/test_gaussian_tensor.cpp
         tests/gaussian/test_gaussian_ply.cpp
         tests/gaussian/test_gaussian_render.cpp
+        tests/gaussian/test_gaussian_voxel.cpp
+        tests/gaussian/test_lidar_occupancy.cpp
     )
 
     target_compile_definitions(gaussian_tests PRIVATE
@@ -709,6 +713,7 @@ install(DIRECTORY
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/riemann"
     FILES_MATCHING
         PATTERN "splat" EXCLUDE
+        PATTERN "gaussian_voxel" EXCLUDE
         PATTERN "normal" EXCLUDE
         PATTERN "*.hpp"
         PATTERN "*.h"
@@ -719,7 +724,7 @@ install(DIRECTORY
 )
 
 if(RIEMANN_ENABLE_GAUSSIAN)
-    foreach(gdir normal splat)
+    foreach(gdir normal splat gaussian_voxel)
         install(DIRECTORY
             "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/${gdir}/"
             DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/riemann/${gdir}"

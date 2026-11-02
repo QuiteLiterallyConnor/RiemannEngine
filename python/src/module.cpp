@@ -27,5 +27,10 @@ PYBIND11_MODULE(_C, m) {
 #ifdef RIEMANN_ENABLE_GAUSSIAN
   auto gaussian = m.def_submodule("gaussian", "3D Gaussian splats");
   riemann_py::bind_gaussian(gaussian);
+  auto gaussian_voxel =
+      m.def_submodule("gaussian_voxel", "Differentiable Gaussian voxelization");
+  auto occupancy =
+      m.def_submodule("occupancy", "LiDAR occupancy targets and losses");
+  riemann_py::bind_gaussian_voxel(gaussian_voxel, occupancy);
 #endif
 }

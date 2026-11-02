@@ -17,6 +17,8 @@ void bind_nn(pybind11::module_ &m);
 void bind_adaptive(pybind11::module_ &m);
 #ifdef RIEMANN_ENABLE_GAUSSIAN
 void bind_gaussian(pybind11::module_ &m);
+void bind_gaussian_voxel(pybind11::module_ &gaussian_voxel,
+                         pybind11::module_ &occupancy);
 #endif
 
 } // namespace riemann_py
