@@ -8,8 +8,6 @@
 [![Documentation](https://img.shields.io/badge/Docs-GitHub%20Pages-222222?logo=github&logoColor=white&style=for-the-badge)](https://quiteliterallyconnor.github.io/RiemannEngine/)
 [![Releases](https://img.shields.io/badge/Download-Releases-2ea44f?logo=github&logoColor=white&style=for-the-badge)](https://github.com/QuiteLiterallyConnor/RiemannEngine/releases)
 
-<img src="assets/splat.gif" alt="3D Gaussian splat rendering" width="49%" /> <img src="assets/voxels.gif" alt="Adaptive mixed-resolution voxelization" width="49%" />
-
 </div>
 
 ## Features
@@ -32,7 +30,11 @@
 - In the included benchmark the adaptive grid uses **41,376 voxels**, where the equivalent uniform grid needs about **35 million**.
 - Opt-in: the uniform `SparseTensor` API is unchanged.
 
+<img src="assets/voxels.gif" alt="Adaptive mixed-resolution voxelization" width="70%" />
+
 ### 3D Gaussian splats
+<img src="assets/splat.gif" alt="3D Gaussian splat rendering" width="70%" />
+
 - Loads 3DGS `.ply` files, both standard and SuperSplat/PlayCanvas compressed (detected automatically), into a batched, LibTorch-backed `GaussianTensor`.
 - Covariances, opacity and bounds filtering, selection, merging, rigid transforms, and spherical harmonics up to degree 3.
 - **Differentiable rasterizer** with fused CUDA forward/backward kernels, plus a LibTorch fallback on CPU.
