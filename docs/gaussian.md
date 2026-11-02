@@ -1,15 +1,15 @@
 ---
 title: Gaussian splats
 nav_order: 8
-description: GaussianTensor, trainable models, differentiable CPU/CUDA rasterization, 3DGS-style training and PLY I/O.
+description: GaussianTensor, trainable 3D/4D models, differentiable CPU/CUDA rasterization, training, D-NeRF datasets and PLY I/O.
 permalink: /gaussian/
 ---
 
 # Gaussian splats
 {: .no_toc }
 
-`riemann::gaussian` covers 3D Gaussian splatting: containers, cameras, a differentiable tile
-rasterizer (LibTorch reference path plus fused CUDA kernels), a 3DGS training loop and PLY I/O.
+`riemann::gaussian` covers 3D and dynamic 4D Gaussian splatting: containers, cameras, a differentiable tile
+rasterizer (LibTorch reference path plus fused CUDA kernels), training loops, D-NeRF datasets and PLY I/O.
 {: .fs-5 .fw-300 }
 
 1. TOC
@@ -29,6 +29,9 @@ rasterizer (LibTorch reference path plus fused CUDA kernels), a 3DGS training lo
 | `gaussian_voxel/occupancy.hpp` | LiDAR ray targets, occupied/free/unknown masks, and masked occupancy loss |
 | `splat/soup.hpp` | `GaussianTensor`, an activated structure-of-arrays container |
 | `splat/model.hpp` | `GaussianModel`, raw trainable 3DGS parameters |
+| `splat/model4d.hpp` | `Gaussian4DModel`, time-conditioned Gaussian parameters |
+| `splat/trainer4d.hpp` | `Gaussian4DTrainer`, `Gaussian4DTrainerConfig` |
+| `splat/dnerf.hpp` | `load_dnerf_views`, `TimedView`, `DNerfLoadOptions` |
 | `splat/camera.hpp` | `Camera` |
 | `splat/render.hpp` | `render`, `render_gaussians`, `RenderOptions`, `RenderOutput` |
 | `splat/trainer.hpp` | `GaussianTrainer`, `GaussianTrainerConfig`, `l1_loss`, `ssim` |
@@ -196,7 +199,14 @@ For custom loops, call `accumulate_statistics(out, cam)`, `densify_and_prune()` 
 The free functions `l1_loss(pred, target)` and `ssim(pred, target, window = 11, sigma = 1.5)`
 work on `[H, W, 3]` images.
 
-### Lightweight optimization of a GaussianTensor
+## 4D Gaussian splats (dynamic scenes)
+
+`Gaussian4DModel` and `Gaussian4DTrainer` extend the 3D model with linear velocity and Gaussian temporal
+opacity, `load_dnerf_views` reads D-NeRF/Blender datasets, `reconstruct4d` runs full-data reconstruction,
+`save_four_dgs` exports `.4dgs` playback files and `examples/view_fourdgs.py` plays them back. See the
+dedicated [4D Gaussian splats](./4dgs.md) page.
+
+## Lightweight optimization of a GaussianTensor
 
 `GaussianOptimizer` runs Adam on the fields of an activated `GaussianTensor`. You supply the
 prediction (for example from `render(g, cam).image`):

@@ -57,13 +57,17 @@
 #include "normal/normal_model.hpp"
 #include "normal/normal_render.hpp"
 #include "normal/normal_trainer.hpp"
+#include "splat/dnerf.hpp"
+#include "splat/fourdgs.hpp"
+#include "splat/model4d.hpp"
+#include "splat/trainer4d.hpp"
 #endif
 
 namespace riemann {
 
-inline constexpr const char* VERSION = "1.0.0";
+inline constexpr const char* VERSION = "1.1.0";
 inline constexpr int VERSION_MAJOR = 1;
-inline constexpr int VERSION_MINOR = 0;
+inline constexpr int VERSION_MINOR = 1;
 inline constexpr int VERSION_PATCH = 0;
 
 } // namespace riemann

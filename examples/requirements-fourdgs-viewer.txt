@@ -1,0 +1,3 @@
+numpy>=1.24
+Pillow>=10
+fourdgs @ git+https://github.com/avala-ai/4dgs.git@af5f73f28bfdd38dd210bb46d3f9101d29b906e9#subdirectory=python/fourdgs

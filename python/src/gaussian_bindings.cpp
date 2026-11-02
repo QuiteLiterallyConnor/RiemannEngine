@@ -1,11 +1,15 @@
 #include "bindings.hpp"
 
 #include "splat/camera.hpp"
+#include "splat/dnerf.hpp"
+#include "splat/fourdgs.hpp"
 #include "splat/model.hpp"
+#include "splat/model4d.hpp"
 #include "splat/ply.hpp"
 #include "splat/render.hpp"
 #include "splat/soup.hpp"
 #include "splat/trainer.hpp"
+#include "splat/trainer4d.hpp"
 
 #include <array>
 #include <sstream>
@@ -179,6 +183,90 @@ void bind_gaussian(py::module_ &m) {
         return out.str();
       });
 
+  py::class_<Gaussian4DModel>(m, "Gaussian4DModel")
+      .def(py::init<at::Tensor, at::Tensor, at::Tensor, at::Tensor,
+                     at::Tensor, at::Tensor, at::Tensor, at::Tensor,
+                     at::Tensor>(),
+           py::arg("xyz"), py::arg("f_dc"), py::arg("f_rest"),
+           py::arg("opacity_raw"), py::arg("scale_raw"),
+           py::arg("rotation_raw"), py::arg("velocity"),
+           py::arg("time_center"), py::arg("time_scale_raw"))
+      .def_static("from_model", &Gaussian4DModel::from_model,
+                  py::arg("model"), py::arg("initial_time_scale") = 1.0)
+      .def_static("from_points", &Gaussian4DModel::from_points,
+                  py::arg("positions"), py::arg("colors"),
+                  py::arg("sh_degree") = 3, py::arg("initial_opacity") = 0.1,
+                  py::arg("initial_time_scale") = 0.5)
+      .def("__len__", &Gaussian4DModel::size)
+      .def_property_readonly("size", &Gaussian4DModel::size)
+      .def_property_readonly("sh_degree", &Gaussian4DModel::sh_degree)
+      .def_property_readonly("device", &Gaussian4DModel::device)
+      .def_property_readonly("xyz", &Gaussian4DModel::xyz)
+      .def_property_readonly("f_dc", &Gaussian4DModel::f_dc)
+      .def_property_readonly("f_rest", &Gaussian4DModel::f_rest)
+      .def_property_readonly("opacity_raw", &Gaussian4DModel::opacity_raw)
+      .def_property_readonly("scale_raw", &Gaussian4DModel::scale_raw)
+      .def_property_readonly("rotation_raw", &Gaussian4DModel::rotation_raw)
+      .def_property_readonly("velocity", &Gaussian4DModel::velocity)
+      .def_property_readonly("time_center", &Gaussian4DModel::time_center)
+      .def_property_readonly("time_scale_raw", &Gaussian4DModel::time_scale_raw)
+      .def("positions", &Gaussian4DModel::positions, py::arg("time"))
+      .def("rotations", &Gaussian4DModel::rotations)
+      .def("scales", &Gaussian4DModel::scales)
+      .def("time_scales", &Gaussian4DModel::time_scales)
+      .def("opacities", py::overload_cast<>(&Gaussian4DModel::opacities, py::const_))
+      .def("opacities", py::overload_cast<double>(&Gaussian4DModel::opacities, py::const_),
+           py::arg("time"))
+      .def("sh_coefficients", &Gaussian4DModel::sh_coefficients)
+      .def("at_time", &Gaussian4DModel::at_time, py::arg("time"))
+      .def("parameters", &Gaussian4DModel::parameters)
+      .def("set_parameters", &Gaussian4DModel::set_parameters, py::arg("parameters"))
+      .def("enable_gradients", &Gaussian4DModel::enable_gradients)
+      .def("to", &Gaussian4DModel::to, py::arg("device"))
+      .def("clone", &Gaussian4DModel::clone)
+      .def("select", &Gaussian4DModel::select, py::arg("indices"));
+
+  py::class_<TimedView>(m, "TimedView")
+      .def_readonly("camera", &TimedView::camera)
+      .def_readonly("time", &TimedView::time)
+      .def_readonly("image", &TimedView::image)
+      .def_readonly("image_path", &TimedView::image_path);
+  py::class_<DNerfLoadOptions>(m, "DNerfLoadOptions")
+      .def(py::init<>())
+      .def_readwrite("stride", &DNerfLoadOptions::stride)
+      .def_readwrite("max_frames", &DNerfLoadOptions::max_frames)
+      .def_readwrite("downscale", &DNerfLoadOptions::downscale)
+      .def_readwrite("background", &DNerfLoadOptions::background);
+  m.def("load_dnerf_views", &load_dnerf_views, py::arg("dataset_dir"),
+        py::arg("split"), py::arg("options") = DNerfLoadOptions{},
+        py::call_guard<py::gil_scoped_release>());
+
+  py::class_<FourDGSExportOptions>(m, "FourDGSExportOptions")
+      .def(py::init<>())
+      .def_readwrite("time_start", &FourDGSExportOptions::time_start)
+      .def_readwrite("time_end", &FourDGSExportOptions::time_end)
+      .def_readwrite("seconds_per_time_unit", &FourDGSExportOptions::seconds_per_time_unit)
+      .def_readwrite("cutoff", &FourDGSExportOptions::cutoff)
+      .def_readwrite("chunk_size", &FourDGSExportOptions::chunk_size);
+  py::class_<FourDGSExportResult>(m, "FourDGSExportResult")
+      .def_readonly("gaussians", &FourDGSExportResult::gaussians)
+      .def_readonly("bytes", &FourDGSExportResult::bytes)
+      .def_readonly("clamped_rgb_components", &FourDGSExportResult::clamped_rgb_components)
+      .def_readonly("clamped_sh_coefficients", &FourDGSExportResult::clamped_sh_coefficients)
+      .def_readonly("max_position_error", &FourDGSExportResult::max_position_error)
+      .def_readonly("max_scale_log_error", &FourDGSExportResult::max_scale_log_error)
+      .def_readonly("max_rotation_error", &FourDGSExportResult::max_rotation_error)
+      .def_readonly("max_rgb_error", &FourDGSExportResult::max_rgb_error)
+      .def_readonly("max_opacity_error", &FourDGSExportResult::max_opacity_error)
+      .def_readonly("max_velocity_error", &FourDGSExportResult::max_velocity_error)
+      .def_readonly("max_time_error", &FourDGSExportResult::max_time_error)
+      .def_readonly("max_sigma_log_error", &FourDGSExportResult::max_sigma_log_error)
+      .def_readonly("max_sh_error", &FourDGSExportResult::max_sh_error);
+  m.def("save_four_dgs", &save_four_dgs, py::arg("model"), py::arg("path"),
+        py::arg("options") = FourDGSExportOptions{},
+        py::call_guard<py::gil_scoped_release>(),
+        "Exports the avala-ai version-1 draft .4dgs gaussian-birth container");
+
   // --------------------------------------------------------------------
   // PLY input / output
   // --------------------------------------------------------------------
@@ -219,6 +307,12 @@ void bind_gaussian(py::module_ &m) {
         py::overload_cast<const GaussianTensor &, const Camera &,
                           const RenderOptions &>(&render),
         py::arg("gaussians"), py::arg("camera"),
+        py::arg("options") = RenderOptions{},
+        py::call_guard<py::gil_scoped_release>());
+  m.def("render",
+        py::overload_cast<const Gaussian4DModel &, const Camera &, double,
+                          const RenderOptions &>(&render),
+        py::arg("model"), py::arg("camera"), py::arg("time"),
         py::arg("options") = RenderOptions{},
         py::call_guard<py::gil_scoped_release>());
 
@@ -304,6 +398,37 @@ void bind_gaussian(py::module_ &m) {
            py::call_guard<py::gil_scoped_release>(),
            "Returns (added, removed)")
       .def("reset_opacity", &GaussianTrainer::reset_opacity,
+           py::call_guard<py::gil_scoped_release>());
+
+  py::class_<Gaussian4DTrainerConfig, GaussianTrainerConfig>(m, "Gaussian4DTrainerConfig")
+      .def(py::init<>())
+      .def_readwrite("lr_velocity", &Gaussian4DTrainerConfig::lr_velocity)
+      .def_readwrite("lr_time_center", &Gaussian4DTrainerConfig::lr_time_center)
+      .def_readwrite("lr_time_scale", &Gaussian4DTrainerConfig::lr_time_scale);
+  py::class_<Gaussian4DTrainer>(m, "Gaussian4DTrainer")
+      .def(py::init<Gaussian4DModel &, Gaussian4DTrainerConfig>(),
+           py::arg("model"), py::arg("config") = Gaussian4DTrainerConfig{},
+           py::keep_alive<1, 2>())
+      .def("step", &Gaussian4DTrainer::step, py::arg("camera"),
+           py::arg("time"), py::arg("target"),
+           py::call_guard<py::gil_scoped_release>())
+      .def("render_image", &Gaussian4DTrainer::render_image,
+           py::arg("camera"), py::arg("time"),
+           py::call_guard<py::gil_scoped_release>())
+      .def_property_readonly("iteration", &Gaussian4DTrainer::iteration)
+      .def_property_readonly("active_sh_degree", &Gaussian4DTrainer::active_sh_degree)
+      .def_property_readonly("config", &Gaussian4DTrainer::config)
+      .def("accumulate_statistics", &Gaussian4DTrainer::accumulate_statistics,
+           py::arg("output"), py::arg("camera"),
+           py::call_guard<py::gil_scoped_release>())
+      .def("densify_and_prune", &Gaussian4DTrainer::densify_and_prune,
+           py::call_guard<py::gil_scoped_release>())
+      .def("reset_opacity", &Gaussian4DTrainer::reset_opacity,
+           py::call_guard<py::gil_scoped_release>())
+      .def("save_checkpoint", &Gaussian4DTrainer::save_checkpoint,
+           py::arg("path"), py::call_guard<py::gil_scoped_release>())
+      .def("load_checkpoint", &Gaussian4DTrainer::load_checkpoint,
+           py::arg("path"),
            py::call_guard<py::gil_scoped_release>());
 }
 

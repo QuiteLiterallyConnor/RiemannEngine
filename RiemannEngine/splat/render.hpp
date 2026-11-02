@@ -3,6 +3,7 @@
 
 #include "splat/camera.hpp"
 #include "splat/model.hpp"
+#include "splat/model4d.hpp"
 #include "splat/soup.hpp"
 
 #include <torch/torch.h>
@@ -51,6 +52,13 @@ RenderOutput render(const GaussianModel &model, const Camera &camera,
 // Renders an activated tensor using its per-Gaussian colors.
 RenderOutput render(const GaussianTensor &gaussians, const Camera &camera,
                     const RenderOptions &options = {});
+
+// Renders a dynamic 4D model at a point in time: each Gaussian is moved to
+// its conditional mean and its opacity is attenuated by the temporal
+// Gaussian. Differentiable with respect to every model parameter, including
+// velocity, time_center and time_scale_raw.
+RenderOutput render(const Gaussian4DModel &model, const Camera &camera,
+                    double time, const RenderOptions &options = {});
 
 } // namespace gaussian
 } // namespace riemann

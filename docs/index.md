@@ -28,6 +28,7 @@ splatting, and needs no Python.
 | **Sparse networks** | Convolution, transposed and generative convolution, pooling, batch/instance norm, about 30 activations, residual and squeeze-excite blocks, broadcast and union ops | [Sparse tensors & layers](sparse-tensors/) |
 | **Adaptive voxelization** | Mixed-resolution octree-style leaves (`AdaptiveSparseTensor`), refinement by region/density/variance/predicate, adaptive convolution and pooling, GPU sphere voxelizer | [Adaptive voxelization](adaptive/) |
 | **3D Gaussian splats** | `GaussianTensor` / `GaussianModel`, PLY I/O, SH degree 0-3, fused CUDA tile rasterizer, a 3DGS-style trainer with densification and pruning | [Gaussian splats](gaussian/) |
+| **4D Gaussian splats** | `Gaussian4DModel` with linear motion and temporal opacity, `Gaussian4DTrainer`, D-NeRF loading, full-data `reconstruct4d` runner, `.4dgs` export, Python orbit viewer and looping GIFs | [4D Gaussian splats](4dgs/) |
 | **Training** | Optimizer factory, sparse losses, datasets and collation, gradient accumulation, LR scheduling, model and tensor persistence | [Training](training/) |
 
 ## Where to start

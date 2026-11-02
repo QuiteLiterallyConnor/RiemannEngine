@@ -2,13 +2,26 @@
 
 # RiemannEngine
 
-**CUDA-accelerated sparse tensor engine for native C++, with adaptive mixed-resolution voxelization and 3D Gaussian splats.**
+**CUDA-accelerated sparse tensor engine for native C++/Python, with adaptive mixed-resolution voxelization and 3D Gaussian splats.**
 
 [![Docker Hub](https://img.shields.io/badge/Docker%20Hub-acaicia%2Friemannengine-0db7ed?logo=docker&logoColor=white&style=for-the-badge)](https://hub.docker.com/r/acaicia/riemannengine)
 [![Documentation](https://img.shields.io/badge/Docs-GitHub%20Pages-222222?logo=github&logoColor=white&style=for-the-badge)](https://quiteliterallyconnor.github.io/RiemannEngine/)
 [![Releases](https://img.shields.io/badge/Download-Releases-2ea44f?logo=github&logoColor=white&style=for-the-badge)](https://github.com/QuiteLiterallyConnor/RiemannEngine/releases)
 
 </div>
+
+## 4D Gaussian splats
+
+<img src="assets/4dgs.gif" alt="Looping orbit of a reconstructed 4D Gaussian splat scene (D-NeRF bouncingballs)" width="70%" />
+
+Reconstruct dynamic scenes from posed, timestamped images, export them to `.4dgs`, and play them back with an orbiting camera.
+
+- **Train:** `Gaussian4DModel` adds per-Gaussian linear velocity and a Gaussian temporal opacity window to 3DGS. `Gaussian4DTrainer` optimizes it end to end through the fused CUDA rasterizer, and D-NeRF/Blender datasets load directly.
+- **Reconstruct:** the `reconstruct4d` runner trains on every frame at full resolution, with resumable checkpoints and validation and test metrics. On `bouncingballs` (150 frames, 800×800, 30k steps) it produced 99,077 Gaussians with **34.91 dB test PSNR** and **0.988 SSIM** in about 14 minutes on an RTX 3080.
+- **Export:** a native C++/Python writer produces [avala-ai `.4dgs`](https://github.com/avala-ai/4dgs) (version-1 draft) files that keep motion, temporal opacity and all SH bands. The export reports its quantization error, and the reference validator found no issues in the exported scene.
+- **Play:** [`examples/view_fourdgs.py`](examples/view_fourdgs.py) opens a `.4dgs` file in an interactive viewer with orbit, pan and zoom, or renders a seamlessly looping orbit GIF like the one above.
+
+See the [4D Gaussian splats guide](docs/4dgs.md).
 
 ## Features
 
@@ -32,13 +45,15 @@
 
 <img src="assets/voxels.gif" alt="Adaptive mixed-resolution voxelization" width="70%" />
 
-### 3D Gaussian splats
+### 3D and 4D Gaussian splats
 <img src="assets/splat.gif" alt="3D Gaussian splat rendering" width="70%" />
 
 - Loads 3DGS `.ply` files, both standard and SuperSplat/PlayCanvas compressed (detected automatically), into a batched, LibTorch-backed `GaussianTensor`.
 - Covariances, opacity and bounds filtering, selection, merging, rigid transforms, and spherical harmonics up to degree 3.
 - **Differentiable rasterizer** with fused CUDA forward/backward kernels, plus a LibTorch fallback on CPU.
 - A 3DGS-style `GaussianTrainer` with densification, pruning and opacity reset, and PLY export.
+- Dynamic `Gaussian4DModel` and `Gaussian4DTrainer` with differentiable motion and temporal opacity, plus a D-NeRF posed-image loader. See the [4D Gaussian splats guide](docs/4dgs.md); tested on `tests/data/bouncingballs`.
+- Native/Python `.4dgs` export preserves dynamic motion, temporal opacity and SH using the [avala-ai version-1 draft format](docs/4dgs.md#dynamic-4dgs-export), with explicit quantization/clipping reports.
 - On an RTX 3080, a 139K-Gaussian scene loads in about 17–37 ms and a 512×512 render takes about 6 ms.
 
 ### Gaussian-to-voxel occupancy

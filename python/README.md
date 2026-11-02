@@ -82,6 +82,57 @@ trainer = re.gaussian.GaussianTrainer(model)
 result = trainer.step(camera, target_image)
 ```
 
+### Dynamic 4D Gaussian splats
+
+```python
+g = re.gaussian
+options = g.DNerfLoadOptions()
+options.downscale = 25
+options.max_frames = 6
+options.stride = 25
+views = g.load_dnerf_views("tests/data/bouncingballs", "train", options)
+model = g.Gaussian4DModel.from_points(
+    torch.rand(256, 3) * 2 - 1, torch.full((256, 3), 0.5), sh_degree=0)
+config = g.Gaussian4DTrainerConfig()
+config.densify = False
+config.render.background = torch.ones(3)
+trainer = g.Gaussian4DTrainer(model, config)
+for step in range(120):
+    view = views[step % len(views)]
+    result = trainer.step(view.camera, view.time, view.image)
+image = trainer.render_image(views[0].camera, time=0.5)
+g.save_ply(model.at_time(0.5), "snapshot.ply")  # static snapshot only
+
+# Preserve all nine tensors to retain the dynamic model (not optimizer state).
+torch.save([p.detach().cpu() for p in model.parameters()], "dynamic.pt")
+restored = g.Gaussian4DModel(*torch.load("dynamic.pt", weights_only=True))
+
+# Resume optimization, including Adam, iteration, statistics and RNG state.
+trainer.save_checkpoint("training.pt")
+# Construct a model and trainer with the same config, then:
+trainer.load_checkpoint("training.pt")
+
+# Dynamic playback interchange, including motion, temporal opacity and SH.
+export_options = g.FourDGSExportOptions()
+export_options.seconds_per_time_unit = 2.0  # normalized [0,1) -> two seconds
+report = g.save_four_dgs(model, "scene.4dgs", export_options)
+print(report.bytes, report.clamped_rgb_components, report.max_position_error)
+```
+
+The model uses linear per-Gaussian motion and Gaussian temporal opacity windows,
+not a deformation network. Time conditioning is differentiable on CPU and CUDA.
+See the [4D guide](../docs/4dgs.md) for the
+parameterization, learning rates, limitations and bouncingballs test results.
+For all-frame, full-resolution reconstruction with automatic checkpoints,
+validation/test metrics and PNG previews, build the native `reconstruct4d`
+target described in the [full-data runner guide](../docs/4dgs.md#full-data-reconstruction-runner).
+The [dynamic export guide](../docs/4dgs.md#dynamic-4dgs-export) describes
+avala-ai's version-1 draft `.4dgs` compatibility, time remapping, quantization
+and required RGB/SH clamping. Export refuses existing destinations and does not
+replace the lossless training checkpoint.
+For interactive playback with orbit/pan/zoom and seamless ping-pong orbit GIFs,
+see the [Python viewer guide](../docs/4dgs.md#interactive-playback-and-looping-orbit-gifs).
+
 ### Gaussian-to-voxel accumulation and automatic refinement
 
 ```python
@@ -127,7 +178,7 @@ decoder's prediction.
 | `riemannengine` | `SparseTensor`, `TensorField`, `CoordinateManager`, enums, batching helpers (`batched_coordinates`, `sparse_collate`), functional ops (`cat`, `sum`, `mean`, `var`, `to_sparse`, …) |
 | `riemannengine.nn` | `RiemannConvolution`, `RiemannConvolutionTranspose`, `RiemannLinear`, `RiemannBatchNorm`, poolings, 25+ activations, `BasicBlock`/`Bottleneck`, squeeze-excitation blocks, broadcast/pruning/union ops |
 | `riemannengine.adaptive` | `AdaptiveSparseTensor`, `AdaptiveVoxelConfig`, `AxisAlignedRegion`, `convolution`, `pool`, `interpolate`, refinement/coarsening |
-| `riemannengine.gaussian` | `GaussianTensor`, `GaussianModel`, `Camera`, `render`, PLY I/O, `GaussianTrainer`, `l1_loss`, `ssim` |
+| `riemannengine.gaussian` | `GaussianTensor`, `GaussianModel`, `Gaussian4DModel`, `Camera`, `render`, PLY I/O, `save_four_dgs`, `GaussianTrainer`, `Gaussian4DTrainer`, D-NeRF dataset loading, `l1_loss`, `ssim` |
 | `riemannengine.gaussian_voxel` | CPU/CUDA `rasterize`, `rasterize_adaptive`, density/feature aggregation, occupancy mapping, refinement options |
 | `riemannengine.occupancy` | CPU LiDAR ray targets and observed-only binary cross entropy |
 | `riemannengine.camera_occupancy` | Image-conditioned occupancy network, grid/refinement specifications, loss/metrics and checkpoints |

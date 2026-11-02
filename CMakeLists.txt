@@ -595,6 +595,24 @@ if(RIEMANN_BUILD_TESTS)
 endif()
 
 # ============================================================
+# Gaussian reconstruction example
+# ============================================================
+
+if(RIEMANN_ENABLE_GAUSSIAN)
+    add_executable(reconstruct4d examples/reconstruct4d.cpp)
+    target_link_libraries(reconstruct4d PRIVATE riemann_cpp)
+    target_include_directories(reconstruct4d PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine"
+        "${CMAKE_CURRENT_SOURCE_DIR}/RiemannEngine/vendor"
+    )
+    if(RIEMANN_TORCH_CXX_FLAGS)
+        target_compile_options(reconstruct4d PRIVATE
+            $<$<COMPILE_LANGUAGE:CXX>:${RIEMANN_TORCH_CXX_FLAGS}>
+        )
+    endif()
+endif()
+
+# ============================================================
 # Gaussian tests
 # ============================================================
 
@@ -605,6 +623,7 @@ if(RIEMANN_BUILD_TESTS AND RIEMANN_ENABLE_GAUSSIAN)
         tests/gaussian/test_gaussian_tensor.cpp
         tests/gaussian/test_gaussian_ply.cpp
         tests/gaussian/test_gaussian_render.cpp
+        tests/gaussian/test_gaussian4d.cpp
         tests/gaussian/test_gaussian_voxel.cpp
         tests/gaussian/test_lidar_occupancy.cpp
     )

@@ -439,5 +439,20 @@ RenderOutput render(const GaussianTensor &gaussians, const Camera &camera,
                           gaussians.colors(), camera, options);
 }
 
+RenderOutput render(const Gaussian4DModel &model, const Camera &camera,
+                    double time, const RenderOptions &options) {
+  const int degree = options.sh_degree < 0
+                         ? model.sh_degree()
+                         : std::min(options.sh_degree, model.sh_degree());
+  const auto positions = model.positions(time);
+  const auto center = camera.position().to(model.device());
+  auto directions = positions - center;
+  directions = directions / directions.norm(2, {1}, true).clamp_min(1e-12);
+  const auto colors =
+      eval_sh_color(degree, model.sh_coefficients(), directions);
+  return render_gaussians(positions, model.rotation_raw(), model.scales(),
+                          model.opacities(time), colors, camera, options);
+}
+
 } // namespace gaussian
 } // namespace riemann
